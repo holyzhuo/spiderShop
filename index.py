@@ -9,7 +9,7 @@ import os
 
 # 获取分类
 def get_category():
-    sql = "SELECT id, `name` ,url FROM category where id between 2 and 5"
+    sql = "SELECT id, `name` ,url FROM category where id between 1 and 4"
 
     try:
         # 执行SQL语句
@@ -46,6 +46,7 @@ def spider_data(categoryId, categoryUrl):
             onePageNum = len(productHeadEndDivs) + len(productMiddleDivs)
             if onePageNum != 60:
                 print('good not enough url:' + finalUrl)
+                continue
             print(len(productHeadEndDivs), len(productMiddleDivs), onePageNum)
             if onePageNum == 0:
                 break
@@ -70,41 +71,41 @@ def spider_data(categoryId, categoryUrl):
 
         print(len(hrefList), hrefList)
         for item in hrefList:
-            driver.get(item)
+            isSuccess = 0
+            while not isSuccess:
+                driver.get(item)
 
-            try:
-                salesCount = driver.find_element_by_class_name('all-transaction-count').text.replace(' ', '')
-                salesCount = salesCount if  salesCount != '' else '0'
-                productName = driver.find_element_by_class_name('rvm-product-title').text.replace("'", "\\'")
-                imageUrl = driver.find_element_by_class_name('content-main-img').find_element_by_tag_name(
-                    'img').get_attribute(
-                    'src')
-                shopName = driver.find_element_by_id('shop-name-info').text.replace("'", "\\'")
-                productSalePrice = driver.find_element_by_class_name('rvm-price').find_elements_by_tag_name('span')[
-                    -1].get_attribute('content')
-                productOriginPrice = driver.find_element_by_class_name('rvm-price--old').text[3:].replace('.', '')
-                productOriginPrice = productOriginPrice if  productOriginPrice != '' else '0'
-                successRate = driver.find_element_by_class_name('success-transaction-percent').text
-                isSuccess = 1
-            except:
-                isSuccess = 0
+                try:
+                    salesCount = driver.find_element_by_class_name('all-transaction-count').text.replace(' ', '')
+                    salesCount = salesCount if  salesCount != '' else '0'
+                    productName = driver.find_element_by_class_name('rvm-product-title').text.replace("'", "\\'")
+                    imageUrl = driver.find_element_by_class_name('content-main-img').find_element_by_tag_name(
+                        'img').get_attribute(
+                        'src')
+                    shopName = driver.find_element_by_id('shop-name-info').text.replace("'", "\\'")
+                    productSalePrice = driver.find_element_by_class_name('rvm-price').find_elements_by_tag_name('span')[
+                        -1].get_attribute('content')
+                    productOriginPrice = driver.find_element_by_class_name('rvm-price--old').text[3:].replace('.', '')
+                    productOriginPrice = productOriginPrice if  productOriginPrice != '' else '0'
+                    successRate = driver.find_element_by_class_name('success-transaction-percent').text
+                    isSuccess = 1
+                except:
+                    continue
 
-            # SQL 插入语句
-            if isSuccess:
-                sql = "INSERT INTO product(category_id, product_url, image_url, `name`, shop_name, original_price, price, sales, txn_success_rate, `type`)" \
-                      " VALUES ('" + str(categoryId) + "', '" + str(item) + "', '"+ str(imageUrl) + "', '"+str(productName)+"' , '" + str(shopName)+"', '"+str(productOriginPrice)+"', '"+\
-                      str(productSalePrice)+"','"+str(salesCount)+"', '"+str(successRate)+"', '"+str(key)+"')"
-            else:
-                sql = "INSERT INTO product(category_id, product_url, success) VALUES ('" + str(categoryId) + "','"+str(item)+"','"+str(isSuccess)+"')"
+                # SQL 插入语句
+                if isSuccess:
+                    sql = "INSERT INTO product(category_id, product_url, image_url, `name`, shop_name, original_price, price, sales, txn_success_rate, `type`)" \
+                          " VALUES ('" + str(categoryId) + "', '" + str(item) + "', '"+ str(imageUrl) + "', '"+str(productName)+"' , '" + str(shopName)+"', '"+str(productOriginPrice)+"', '"+\
+                          str(productSalePrice)+"','"+str(salesCount)+"', '"+str(successRate)+"', '"+str(key)+"')"
 
-            try:
-                # 执行sql语句
-                print(sql)
-                db.ExecNonQuery(sql)
-                # 提交到数据库执行
-            except:
-                # 如果发生错误则回滚
-                print("error")
+                    try:
+                        # 执行sql语句
+                        print(sql)
+                        db.ExecNonQuery(sql)
+                        # 提交到数据库执行
+                    except:
+                        # 如果发生错误则回滚
+                        print("error")
 
         driver.quit()
 
