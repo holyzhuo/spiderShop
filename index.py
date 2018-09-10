@@ -1,17 +1,15 @@
-import requests
-# url = 'https://www.tokopedia.com/jualbonekamurah/boneka-beruang-teddy-bear-jumbo-besar-pink?src=topads'
-# headers = {'user-agent': 'my-app/0.0.1'}
-# response = requests.get(url, headers=headers)
-# print(response.text)
-
+from multiprocessing import Pool
+import os, time
 from selenium import webdriver
 import time
 import pymysql
 from mysqldbClass import db
+from multiprocessing import Pool
+import os
 
 # 获取分类
 def get_category():
-    sql = "SELECT id, `name` ,url FROM category"
+    sql = "SELECT id, `name` ,url FROM category where id between 2 and 5"
 
     try:
         # 执行SQL语句
@@ -19,11 +17,8 @@ def get_category():
     except:
         print("Error: unable to fetch data")
 
-for result in get_category():
-    categoryId = result[0]
-    categoryName = result[1]
-    categoryUrl = result[2]
-
+def spider_data(categoryId, categoryUrl):
+    print('Run task %s (%s)...' % (str(categoryId), os.getpid()))
     sortList = { '1':'8', '2':'5' }
     for key,value in sortList.items():
         currentCount = 0
@@ -31,12 +26,17 @@ for result in get_category():
         page = 1
         chromePath = 'E:\zcer\code\chromedriver_win32/chromedriver.exe'
         # chromePath = '/usr/local/var/www/python/chromedriver' # mac
-        driver = webdriver.Chrome(chromePath)
+        chrome_options = webdriver.ChromeOptions()
+        prefs = {"profile.managed_default_content_settings.images": 2}
+        chrome_options.add_experimental_option("prefs", prefs)
+        driver = webdriver.Chrome(chromePath, chrome_options=chrome_options)
+
         hrefList = []
 
         while currentCount < limitCount:
             print(categoryUrl + "?ob="+value+"&page=" + str(page))
-            driver.get(categoryUrl + "?ob="+value+"&page=" + str(page))
+            finalUrl = categoryUrl + "?ob="+value+"&page=" + str(page)
+            driver.get(finalUrl)
 
             productHeadEndDivs = driver.find_elements_by_class_name('ta-slot-card')
             headDivs = productHeadEndDivs[0:len(productHeadEndDivs) - 1]
@@ -44,6 +44,8 @@ for result in get_category():
             productMiddleDivs = driver.find_elements_by_class_name('category-product-box')
 
             onePageNum = len(productHeadEndDivs) + len(productMiddleDivs)
+            if onePageNum != 60:
+                print('good not enough url:' + finalUrl)
             print(len(productHeadEndDivs), len(productMiddleDivs), onePageNum)
             if onePageNum == 0:
                 break
@@ -65,8 +67,6 @@ for result in get_category():
 
             page += 1
             currentCount += onePageNum
-
-            time.sleep(1)
 
         print(len(hrefList), hrefList)
         for item in hrefList:
@@ -93,7 +93,7 @@ for result in get_category():
             if isSuccess:
                 sql = "INSERT INTO product(category_id, product_url, image_url, `name`, shop_name, original_price, price, sales, txn_success_rate, `type`)" \
                       " VALUES ('" + str(categoryId) + "', '" + str(item) + "', '"+ str(imageUrl) + "', '"+str(productName)+"' , '" + str(shopName)+"', '"+str(productOriginPrice)+"', '"+\
-                      str(productSalePrice)+"',"+str(salesCount)+", '"+str(successRate)+"', '"+str(key)+"')"
+                      str(productSalePrice)+"','"+str(salesCount)+"', '"+str(successRate)+"', '"+str(key)+"')"
             else:
                 sql = "INSERT INTO product(category_id, product_url, success) VALUES ('" + str(categoryId) + "','"+str(item)+"','"+str(isSuccess)+"')"
 
@@ -108,7 +108,19 @@ for result in get_category():
 
         driver.quit()
 
-#
+
+if __name__=='__main__':
+    print('Parent process %s.' % os.getpid())
+    p = Pool(4)
+    for result in get_category():
+        categoryId = result[0]
+        categoryUrl = result[2]
+        msg = p.apply_async(spider_data, args=(categoryId, categoryUrl,))
+        print(msg)
+    print('Waiting for all subprocesses done...')
+    p.close()
+    p.join()
+    print('All subprocesses done.')
 # print(salesCount, productName, imageUrl, shopName, productSalePrice, productOriginPrice)
 # time.sleep(1)
 # driver.quit()
