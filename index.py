@@ -7,28 +7,17 @@ import requests
 from selenium import webdriver
 import time
 import pymysql
+from mysqldbClass import db
 
 # 获取分类
 def get_category():
-    # 打开数据库连接
-    db = pymysql.connect("localhost", "root", "root", "spider")
-
-    # 使用 cursor() 方法创建一个游标对象 cursor
-    cursor = db.cursor()
-
     sql = "SELECT id, `name` ,url FROM category"
 
     try:
         # 执行SQL语句
-        cursor.execute(sql)
-        # 获取所有记录列表
-        return cursor.fetchall()
+        return db.ExecQuery(sql)
     except:
         print("Error: unable to fetch data")
-
-    # 关闭数据库连接
-    db.close()
-
 
 for result in get_category():
     categoryId = result[0]
@@ -40,7 +29,8 @@ for result in get_category():
         currentCount = 0
         limitCount = 200
         page = 1
-        chromePath = '/usr/local/var/www/python/chromedriver'
+        chromePath = 'E:\zcer\code\chromedriver_win32/chromedriver.exe'
+        # chromePath = '/usr/local/var/www/python/chromedriver' # mac
         driver = webdriver.Chrome(chromePath)
         hrefList = []
 
@@ -54,7 +44,7 @@ for result in get_category():
             productMiddleDivs = driver.find_elements_by_class_name('category-product-box')
 
             onePageNum = len(productHeadEndDivs) + len(productMiddleDivs)
-            print(onePageNum)
+            print(len(productHeadEndDivs), len(productMiddleDivs), onePageNum)
             if onePageNum == 0:
                 break
 
@@ -82,42 +72,39 @@ for result in get_category():
         for item in hrefList:
             driver.get(item)
 
-            salesCount = driver.find_element_by_class_name('all-transaction-count').text
-            productName = driver.find_element_by_class_name('rvm-product-title').text
-            imageUrl = driver.find_element_by_class_name('content-main-img').find_element_by_tag_name(
-                'img').get_attribute(
-                'src')
-            shopName = driver.find_element_by_id('shop-name-info').text
-            shopInfo = driver.find_element_by_id('shop-name-info').text
-            productSalePrice = driver.find_element_by_class_name('rvm-price').find_elements_by_tag_name('span')[
-                -1].get_attribute('content')
-            productOriginPrice = driver.find_element_by_class_name('rvm-price--old').text[3:].replace('.', '')
-            productOriginPrice = productOriginPrice if  productOriginPrice != '' else '0'
-            successRate = driver.find_element_by_class_name('success-transaction-percent').text
-
-            # 打开数据库连接
-            db = pymysql.connect("localhost", "root", "root", "spider")
-
-            # 使用 cursor() 方法创建一个游标对象 cursor
-            cursor = db.cursor()
+            try:
+                salesCount = driver.find_element_by_class_name('all-transaction-count').text.replace(' ', '')
+                salesCount = salesCount if  salesCount != '' else '0'
+                productName = driver.find_element_by_class_name('rvm-product-title').text.replace("'", "\\'")
+                imageUrl = driver.find_element_by_class_name('content-main-img').find_element_by_tag_name(
+                    'img').get_attribute(
+                    'src')
+                shopName = driver.find_element_by_id('shop-name-info').text.replace("'", "\\'")
+                productSalePrice = driver.find_element_by_class_name('rvm-price').find_elements_by_tag_name('span')[
+                    -1].get_attribute('content')
+                productOriginPrice = driver.find_element_by_class_name('rvm-price--old').text[3:].replace('.', '')
+                productOriginPrice = productOriginPrice if  productOriginPrice != '' else '0'
+                successRate = driver.find_element_by_class_name('success-transaction-percent').text
+                isSuccess = 1
+            except:
+                isSuccess = 0
 
             # SQL 插入语句
-            sql = "INSERT INTO product(category_id, product_url, image_url, `name`, shop_name, original_price, price, sales, txn_success_rate, `type`)" \
-                  " VALUES ('" + str(categoryId) + "', '" + str(item) + "', '"+ str(imageUrl) + "', '"+str(productName)+"' , '" + str(shopName)+"', '"+str(productOriginPrice)+"', '"+\
-                  str(productSalePrice)+"','"+str(salesCount)+"', '"+str(successRate)+"', '"+str(key)+"')"
+            if isSuccess:
+                sql = "INSERT INTO product(category_id, product_url, image_url, `name`, shop_name, original_price, price, sales, txn_success_rate, `type`)" \
+                      " VALUES ('" + str(categoryId) + "', '" + str(item) + "', '"+ str(imageUrl) + "', '"+str(productName)+"' , '" + str(shopName)+"', '"+str(productOriginPrice)+"', '"+\
+                      str(productSalePrice)+"',"+str(salesCount)+", '"+str(successRate)+"', '"+str(key)+"')"
+            else:
+                sql = "INSERT INTO product(category_id, product_url, success) VALUES ('" + str(categoryId) + "','"+str(item)+"','"+str(isSuccess)+"')"
+
             try:
                 # 执行sql语句
                 print(sql)
-                cursor.execute(sql)
+                db.ExecNonQuery(sql)
                 # 提交到数据库执行
-                db.commit()
             except:
                 # 如果发生错误则回滚
                 print("error")
-                db.rollback()
-
-            # 关闭数据库连接
-            db.close()
 
         driver.quit()
 
