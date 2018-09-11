@@ -1,15 +1,12 @@
-from multiprocessing import Pool
-import os, time
+import platform
 from selenium import webdriver
-import time
-import pymysql
 from mysqldbClass import db
 from multiprocessing import Pool
 import os
 
 # 获取分类
 def get_category():
-    sql = "SELECT id, `name` ,url FROM category where id between 1 and 4"
+    sql = "SELECT id, `name` ,url FROM category where id in (15,17,18,19)"
 
     try:
         # 执行SQL语句
@@ -24,11 +21,22 @@ def spider_data(categoryId, categoryUrl):
         currentCount = 0
         limitCount = 200
         page = 1
-        chromePath = 'E:\zcer\code\chromedriver_win32/chromedriver.exe'
-        # chromePath = '/usr/local/var/www/python/chromedriver' # mac
+
+        # chromeoption参数设置
         chrome_options = webdriver.ChromeOptions()
         prefs = {"profile.managed_default_content_settings.images": 2}
         chrome_options.add_experimental_option("prefs", prefs)
+        # 根据不同环境区分driver
+        env = platform.system()
+        if env == 'Windows': # windows
+            chromePath = 'E:\zcer\code\chromedriver_win32/chromedriver.exe'
+        elif env == 'Darwin': # mac
+            chromePath = '/usr/local/var/www/python/chromedriver'
+        else: # linux
+            chromePath = '/usr/bin/chromedriver'
+            chrome_options.add_argument('--headless')
+            chrome_options.add_argument('--no-sandbox')
+
         driver = webdriver.Chrome(chromePath, chrome_options=chrome_options)
 
         hrefList = []
@@ -44,7 +52,7 @@ def spider_data(categoryId, categoryUrl):
             productMiddleDivs = driver.find_elements_by_class_name('category-product-box')
 
             onePageNum = len(productHeadEndDivs) + len(productMiddleDivs)
-            if onePageNum != 60:
+            if onePageNum != 60 and onePageNum != 48:
                 print('good not enough url:' + finalUrl)
                 continue
             print(len(productHeadEndDivs), len(productMiddleDivs), onePageNum)
@@ -89,7 +97,8 @@ def spider_data(categoryId, categoryUrl):
                     productOriginPrice = productOriginPrice if  productOriginPrice != '' else '0'
                     successRate = driver.find_element_by_class_name('success-transaction-percent').text
                     isSuccess = 1
-                except:
+                except Exception as e:
+                    print('Error:', e)
                     continue
 
                 # SQL 插入语句
@@ -116,8 +125,7 @@ if __name__=='__main__':
     for result in get_category():
         categoryId = result[0]
         categoryUrl = result[2]
-        msg = p.apply_async(spider_data, args=(categoryId, categoryUrl,))
-        print(msg)
+        p.apply_async(spider_data, args=(categoryId, categoryUrl,))
     print('Waiting for all subprocesses done...')
     p.close()
     p.join()
