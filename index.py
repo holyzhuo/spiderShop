@@ -6,7 +6,7 @@ import os
 
 # 获取分类
 def get_category():
-    sql = "SELECT id, `name` ,url FROM category where id in (15,17,18,19)"
+    sql = "SELECT id, `name` ,url FROM category where id in (43,40,27,23)"
 
     try:
         # 执行SQL语句
@@ -80,7 +80,8 @@ def spider_data(categoryId, categoryUrl):
         print(len(hrefList), hrefList)
         for item in hrefList:
             isSuccess = 0
-            while not isSuccess:
+            tryCount = 1  # 单个产品最大重试获取次数(有可能出现产品不存在404的情况)
+            while not isSuccess and tryCount < 10:
                 driver.get(item)
 
                 try:
@@ -99,6 +100,7 @@ def spider_data(categoryId, categoryUrl):
                     isSuccess = 1
                 except Exception as e:
                     print('Error:', e)
+                    tryCount += 1
                     continue
 
                 # SQL 插入语句
