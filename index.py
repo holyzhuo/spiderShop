@@ -4,46 +4,58 @@ from mysqldbClass import db
 from multiprocessing import Pool
 import os
 
-# 获取分类
-def get_category():
-    sql = "SELECT id, `name` ,url FROM category where id in (43,40,27,23)"
+
+def get_driver():
+    # chromeoption参数设置
+    chrome_options = webdriver.ChromeOptions()
+    prefs = {"profile.managed_default_content_settings.images": 2}
+    chrome_options.add_experimental_option("prefs", prefs)
+    # 根据不同环境区分driver
+    env = platform.system()
+    if env == 'Windows':  # windows
+        chromePath = 'E:\zcer\code\chromedriver_win32/chromedriver.exe'
+        # chrome_options.add_argument('--headless')
+        # chrome_options.add_argument('--no-sandbox')
+    elif env == 'Darwin':  # mac
+        chromePath = '/usr/local/var/www/python/chromedriver'
+    else:  # linux
+        chromePath = '/usr/bin/chromedriver'
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
 
     try:
-        # 执行SQL语句
-        return db.ExecQuery(sql)
+        driver = webdriver.Chrome(chromePath, chrome_options=chrome_options)
+    except Exception as e:
+        print(e)
+    finally:
+        return driver
+
+
+# 获取分类
+def get_category():
+    sql = "SELECT id, `name` ,url FROM category where id in (22, 29, 49, 55)" # 需修改部分
+
+    try:
+        return db.ExecQuery(sql)  # 执行SQL语句
     except:
         print("Error: unable to fetch data")
 
+
+# 爬取单个商品数据
 def spider_data(categoryId, categoryUrl):
     print('Run task %s (%s)...' % (str(categoryId), os.getpid()))
-    sortList = { '1':'8', '2':'5' }
-    for key,value in sortList.items():
+    sortList = {'1': '8', '2': '5'} # 根据销量排序和根据评分排序
+    driver = get_driver()
+    for key, value in sortList.items():
         currentCount = 0
         limitCount = 200
         page = 1
 
-        # chromeoption参数设置
-        chrome_options = webdriver.ChromeOptions()
-        prefs = {"profile.managed_default_content_settings.images": 2}
-        chrome_options.add_experimental_option("prefs", prefs)
-        # 根据不同环境区分driver
-        env = platform.system()
-        if env == 'Windows': # windows
-            chromePath = 'E:\zcer\code\chromedriver_win32/chromedriver.exe'
-        elif env == 'Darwin': # mac
-            chromePath = '/usr/local/var/www/python/chromedriver'
-        else: # linux
-            chromePath = '/usr/bin/chromedriver'
-            chrome_options.add_argument('--headless')
-            chrome_options.add_argument('--no-sandbox')
-
-        driver = webdriver.Chrome(chromePath, chrome_options=chrome_options)
-
         hrefList = []
 
         while currentCount < limitCount:
-            print(categoryUrl + "?ob="+value+"&page=" + str(page))
-            finalUrl = categoryUrl + "?ob="+value+"&page=" + str(page)
+            print(categoryUrl + "?ob=" + value + "&page=" + str(page))
+            finalUrl = categoryUrl + "?ob=" + value + "&page=" + str(page)
             driver.get(finalUrl)
 
             productHeadEndDivs = driver.find_elements_by_class_name('ta-slot-card')
@@ -82,11 +94,10 @@ def spider_data(categoryId, categoryUrl):
             isSuccess = 0
             tryCount = 1  # 单个产品最大重试获取次数(有可能出现产品不存在404的情况)
             while not isSuccess and tryCount < 10:
-                driver.get(item)
-
                 try:
+                    driver.get(item)
                     salesCount = driver.find_element_by_class_name('all-transaction-count').text.replace(' ', '')
-                    salesCount = salesCount if  salesCount != '' else '0'
+                    salesCount = salesCount if salesCount != '' else '0'
                     productName = driver.find_element_by_class_name('rvm-product-title').text.replace("'", "\\'")
                     imageUrl = driver.find_element_by_class_name('content-main-img').find_element_by_tag_name(
                         'img').get_attribute(
@@ -95,33 +106,33 @@ def spider_data(categoryId, categoryUrl):
                     productSalePrice = driver.find_element_by_class_name('rvm-price').find_elements_by_tag_name('span')[
                         -1].get_attribute('content')
                     productOriginPrice = driver.find_element_by_class_name('rvm-price--old').text[3:].replace('.', '')
-                    productOriginPrice = productOriginPrice if  productOriginPrice != '' else '0'
+                    productOriginPrice = productOriginPrice if productOriginPrice != '' else '0'
                     successRate = driver.find_element_by_class_name('success-transaction-percent').text
                     isSuccess = 1
                 except Exception as e:
-                    print('Error:', e)
+                    print('category id: ' + str(categoryId) + ' ,retry count:' + str(tryCount) + ', Error:', e)
                     tryCount += 1
+                    driver.quit()
+                    driver = get_driver()
                     continue
 
                 # SQL 插入语句
                 if isSuccess:
                     sql = "INSERT INTO product(category_id, product_url, image_url, `name`, shop_name, original_price, price, sales, txn_success_rate, `type`)" \
-                          " VALUES ('" + str(categoryId) + "', '" + str(item) + "', '"+ str(imageUrl) + "', '"+str(productName)+"' , '" + str(shopName)+"', '"+str(productOriginPrice)+"', '"+\
-                          str(productSalePrice)+"','"+str(salesCount)+"', '"+str(successRate)+"', '"+str(key)+"')"
+                          " VALUES ('" + str(categoryId) + "', '" + str(item) + "', '" + str(imageUrl) + "', '" + str(
+                        productName) + "' , '" + str(shopName) + "', '" + str(productOriginPrice) + "', '" + \
+                          str(productSalePrice) + "','" + str(salesCount) + "', '" + str(successRate) + "', '" + str(
+                        key) + "')"
 
                     try:
-                        # 执行sql语句
                         print(sql)
-                        db.ExecNonQuery(sql)
-                        # 提交到数据库执行
-                    except:
-                        # 如果发生错误则回滚
-                        print("error")
-
-        driver.quit()
+                        db.ExecNonQuery(sql)  # 执行sql语句
+                    except Exception as e:
+                        print("error:" + str(e))
+    driver.quit()
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     print('Parent process %s.' % os.getpid())
     p = Pool(4)
     for result in get_category():
@@ -132,7 +143,3 @@ if __name__=='__main__':
     p.close()
     p.join()
     print('All subprocesses done.')
-# print(salesCount, productName, imageUrl, shopName, productSalePrice, productOriginPrice)
-# time.sleep(1)
-# driver.quit()
-
